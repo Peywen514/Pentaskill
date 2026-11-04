@@ -2,6 +2,8 @@
 
 記錄日期：2026-11-04。
 
+品牌修訂 0.1.1：名稱統一為「精五門 PentaSkill」，頁首／頁尾／favicon 使用原始 Logo PNG；以 CSS contain 與一致寬高保持原圖比例。紫白、青藍及桃紫配色已套用，瀏覽器畫面驗收仍待完成。
+
 ## 自動檢查
 
 已執行：`npm run check`、`npm test`、`npm run build`。

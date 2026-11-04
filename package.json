@@ -1,9 +1,9 @@
 {
   "name": "pentaskill-next",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
-  "description": "練課室 Pentaskill 新版：第一階段互動驗收原型",
+  "description": "精五門 Pentaskill 新版：第一階段互動驗收原型",
   "scripts": {
     "dev": "node scripts/serve.mjs",
     "start": "node scripts/serve.mjs",
@@ -11,5 +11,7 @@
     "check": "node scripts/check.mjs",
     "build": "node scripts/build.mjs"
   },
-  "engines": { "node": ">=22" }
+  "engines": {
+    "node": ">=22"
+  }
 }
