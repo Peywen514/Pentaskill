@@ -15,5 +15,5 @@ const html = await readFile(new URL('index.html', root), 'utf8');
 const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map(m => m[1]);
 if (new Set(ids).size !== ids.length) throw new Error('Duplicate static HTML IDs');
 if (/\bon(?:click|submit|change)\s*=/.test(html)) throw new Error('Inline handlers are not allowed');
-for (const link of [...html.matchAll(/(?:src|href)="([^"#]+)"/g)].map(m => m[1]).filter(s => !/^https?:/.test(s))) await readFile(new URL(link, root));
+for (const link of [...html.matchAll(/(?:src|href)="([^"#]+)"/g)].map(m => m[1]).filter(s => !/^https?:/.test(s))) { const asset = new URL(link, root); asset.search = ''; asset.hash = ''; await readFile(asset); }
 console.log(`Checked ${count} JavaScript files, static HTML IDs and local assets.`);
