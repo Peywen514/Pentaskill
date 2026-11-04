@@ -43,7 +43,7 @@ npm run account:role -- --email 已註冊信箱 --role admin
 
 ## 已實作的保護
 
-- Node scrypt：N=32768、r=8、p=3，16 bytes 隨機 Salt；密碼長度 12–128 字元，不自動 trim 密碼。
+- Node scrypt：N=32768、r=8、p=3，16 bytes 隨機 Salt；密碼長度 8–128 字元，不自動 trim 密碼。最低 8 字元依本專案使用體驗決策設定，仍建議較長且不重複使用的密碼；目前未實作 MFA，此政策不宣稱符合 NIST 單因子登入的 15 字元要求。
 - 隨機 32 bytes Session Token，資料庫只存 SHA-256 摘要；絕對有效期 8 小時。
 - Cookie：HttpOnly、SameSite=Strict、Path=/；HTTPS 加 Secure 與 `__Host-` 前綴。
 - 成功登入更換 Session，登出立即刪除伺服器端憑證。

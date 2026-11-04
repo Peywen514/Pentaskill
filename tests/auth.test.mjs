@@ -63,6 +63,16 @@ test('拒絕弱密碼、重複信箱與無效帳號資料', async () => {
   } finally { store.close(); }
 });
 
+test('允許 8 字元密碼並可登入，拒絕 7 字元或超過 128 字元', async () => {
+  const store = new AuthStore();
+  try {
+    await assert.rejects(store.createUser({ ...userData(), password: '1234567' }));
+    await assert.rejects(store.createUser({ ...userData(), password: 'a'.repeat(129) }));
+    const user = await store.createUser({ ...userData(), password: 'lesson88' });
+    assert.equal((await store.login({ email: user.email, password: 'lesson88' }, 'eight-character')).id, user.id);
+  } finally { store.close(); }
+});
+
 test('登入嘗試有帳號與來源限流', async () => {
   const store = new AuthStore();
   try { for (let i = 0; i < 10; i++) await assert.rejects(store.login({ email: 'missing@example.test', password: secret }, 'rate'), e => e.status === 401); await assert.rejects(store.login({ email: 'missing@example.test', password: secret }, 'rate'), e => e.status === 429); }

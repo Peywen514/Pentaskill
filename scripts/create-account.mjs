@@ -16,7 +16,7 @@ try {
   const name = await ask('顯示名稱：');
   const role = (await ask('身分 student / instructor / admin：')).trim();
   if (!['student', 'instructor', 'admin'].includes(role)) throw new Error('請輸入有效身分');
-  const secret = await password('密碼（12–128 字元，不顯示輸入）：');
+  const secret = await password('密碼（8–128 字元，不顯示輸入）：');
   const repeated = await password('再輸入一次密碼：');
   if (secret !== repeated) throw new Error('兩次密碼不一致');
   store = new AuthStore(process.env.AUTH_DB_PATH ?? fileURLToPath(new URL('../.data/pentaskill.sqlite', import.meta.url)));

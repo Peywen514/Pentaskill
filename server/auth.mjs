@@ -24,7 +24,7 @@ export function normalizeEmail(value) {
   return email;
 }
 function validatePassword(password) {
-  if (typeof password !== 'string' || password.length < 12 || password.length > 128) throw new AuthError('密碼需為 12–128 個字元');
+  if (typeof password !== 'string' || password.length < 8 || password.length > 128) throw new AuthError('密碼需為 8–128 個字元');
 }
 function profile(user) { return { id: user.id, name: user.name, email: user.email, role: user.role, emailVerified: Boolean(user.email_verified) }; }
 export async function hashPassword(password) {
