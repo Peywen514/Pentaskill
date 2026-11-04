@@ -2,6 +2,9 @@ import { createInterface } from 'node:readline';
 import { stdin, stdout } from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { AuthStore } from '../server/auth.mjs';
+import { existsSync } from 'node:fs';
+
+if (!process.env.AUTH_DB_PATH && existsSync(new URL('../deployment.json', import.meta.url))) throw new Error('正式會員已搬至 D1。本機工具請明確設定測試用 AUTH_DB_PATH，避免修改搬移前的備份資料庫。');
 
 if (!stdin.isTTY) throw new Error('請在互動式終端執行 npm run account:create，密碼不接受命令列參數');
 const rl = createInterface({ input: stdin, output: stdout, terminal: true });

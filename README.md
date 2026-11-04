@@ -2,9 +2,11 @@
 
 獨立於舊專案的新版開發。**目前為第 1 階段互動原型＋第 2 階段登入基礎，尚未正式營運。**
 
+新版已部署：[精五門 PentaSkill](https://pentaskill-v2.pey514514.workers.dev)。會員、角色與登入憑證現在使用全新的 Cloudflare D1，不依賴本機資料庫。管理者可在 [會員資料](https://pentaskill-v2.pey514514.workers.dev/#members) 登入後搜尋與檢閱帳號。詳見 [D1 搬移與檢閱指南](docs/cloudflare-d1.md)。
+
 ## 本階段已實作
 
-- Email／密碼註冊、登入、登出，SQLite 會員／Session 保存，學員／講師／管理者後端權限檢查。詳見 [登入與帳號建立](docs/authentication.md)。
+- Email／密碼註冊、登入、登出，D1 會員／Session 保存，學員／講師／管理者後端權限檢查與會員清單搜尋。Node／SQLite 保留作隔離開發測試。
 - 淺色紫白／霓光紫、青藍、桃紫品牌 UI、放大字級、手機／平板／桌機響應式版型、精選課程輪播（可暫停）。
 - 課程商城、程度篩選、關鍵字搜尋、課程介紹、錄播與陪跑方案摘要。
 - 四階段 AI 學習地圖：新手 → 理論 → 實作 → 開發者。
@@ -19,18 +21,19 @@
 
 ## 執行
 
-使用 Node.js 24 或以上，無第三方套件安裝需求。會員資料保存在未追蹤的 `.data/`。
+開發工具使用 Node.js 24 或以上與鎖定版本的 Wrangler；正式網站使用 Workers＋D1。帳號資料已搬到雲端，本機 `.data/` 僅保留私有備份及隔離測試資料。
 
 ```sh
+npm ci
 npm run dev
-# http://127.0.0.1:4173
+# http://127.0.0.1:4173 轉向新版雲端網站
 npm run check
 npm test
 npm run build
 ```
 
 `dist/` 為前端體驗版產物。不要直接將儲存庫根目錄當作靜態網站公開。
-登入需要 `npm run dev`／`npm start` 啟動完整 Node 後端，純靜態網站不能處理帳號登入。管理者與講師帳號使用 `npm run account:create` 在伺服器終端建立，無預設帳密。
+正式登入由雲端 Worker 處理，不需要本機開機。`account:create`／`account:role` 現在只允許明確指定測試資料庫使用，不能修改正式 D1 會員；無預設帳密。
 
 ## 主要入口
 
@@ -43,6 +46,7 @@ npm run build
 | `#member` | 學員登入後的會員中心 |
 | `#login`／`#register` | 登入／學員註冊 |
 | `#instructor` | 講師登入後的專區入口 |
+| `#members` | 管理者專用會員清單 |
 | `#video` | CC0 影片播放體驗 |
 | `#coaching` | 個教與預約草稿 |
 | `#admin` | 管理者登入後的課程管理預覽 |
@@ -56,6 +60,7 @@ npm run build
 - [參考平台與研究來源](docs/research.md)
 - [變更紀錄](CHANGELOG.md)
 - [登入與帳號管理](docs/authentication.md)
+- [Cloudflare D1 搬移與會員檢閱](docs/cloudflare-d1.md)
 
 ## 外部資源
 

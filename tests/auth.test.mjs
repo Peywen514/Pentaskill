@@ -96,6 +96,7 @@ test('HTTP 註冊、登入、角色授權、CSRF 與登出完整流程', async t
   const post = (path, data, cookie = '', extra = {}) => fetch(origin + path, { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json', 'X-PentaSkill-Client': 'web', Cookie: cookie, ...extra }, body: JSON.stringify(data) });
   const get = (path, cookie = '') => fetch(origin + path, { headers: { Cookie: cookie } });
   assert.equal((await get('/api/admin/status')).status, 401);
+  assert.equal((await get('/api/admin/members')).status, 401);
   assert.equal((await post('/api/auth/register', userData(), '', { Origin: 'https://other.example' })).status, 403);
   assert.equal((await post('/api/auth/register', userData(), '', { 'X-PentaSkill-Client': '' })).status, 403);
   assert.equal((await post('/api/auth/register', userData(), '', { 'Content-Type': 'text/plain' })).status, 415);
@@ -104,6 +105,7 @@ test('HTTP 註冊、登入、角色授權、CSRF 與登出完整流程', async t
   const cookie = registration.headers.get('set-cookie').split(';')[0]; assert.match(registration.headers.get('set-cookie'), /HttpOnly/);
   assert.equal((await get('/api/workspace', cookie)).status, 200);
   assert.equal((await get('/api/admin/status', cookie)).status, 403);
+  assert.equal((await get('/api/admin/members', cookie)).status, 403);
   assert.equal((await get('/api/instructor/status', cookie)).status, 403);
   assert.equal((await post('/api/auth/login', { email: body.user.email, password: 'wrong' })).status, 401);
   const login = await post('/api/auth/login', { email: body.user.email, password: secret }, cookie); assert.equal(login.status, 200);
@@ -113,6 +115,7 @@ test('HTTP 註冊、登入、角色授權、CSRF 與登出完整流程', async t
   assert.equal((await get('/api/workspace', next)).status, 401);
   const admin = await store.createUser(userData('admin@example.test'), 'admin'); const adminToken = store.createSession(admin.id);
   assert.equal((await get('/api/admin/status', `pentaskill_session=${adminToken}`)).status, 200);
+  const members=await get('/api/admin/members',`pentaskill_session=${adminToken}`);assert.equal(members.status,200);assert.doesNotMatch(JSON.stringify(await members.json()),/password_hash|scrypt\$/);
   const instructor = await store.createUser(userData('instructor@example.test'), 'instructor'); const instructorToken = store.createSession(instructor.id);
   assert.equal((await get('/api/instructor/status', `pentaskill_session=${instructorToken}`)).status, 200);
   assert.equal((await get('/api/admin/status', `pentaskill_session=${instructorToken}`)).status, 403);

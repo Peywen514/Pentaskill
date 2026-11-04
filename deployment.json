@@ -1,0 +1,12 @@
+{
+  "environment": "cloudflare",
+  "url": "https://pentaskill-v2.pey514514.workers.dev",
+  "worker": "pentaskill-v2",
+  "database": "pentaskill-members-v2-20261104",
+  "databaseId": "ce99a8e9-a19a-4a92-8494-5be318945f6a",
+  "migratedMembers": 1,
+  "migratedRoleChanges": 1,
+  "passwordHashesPreserved": true,
+  "sessionsMigrated": false,
+  "cutoverDate": "2026-11-04"
+}

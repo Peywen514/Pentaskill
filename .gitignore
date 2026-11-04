@@ -10,3 +10,6 @@ artifacts/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+.wrangler/
+.dev.vars
+.dev.vars.*

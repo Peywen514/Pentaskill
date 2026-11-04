@@ -1,5 +1,11 @@
 # 系統架構與資料流程
 
+## 0.3.0 目前部署
+
+前端＋`server/worker.mjs` → D1 binding `DB` → 全新會員資料庫。`server/auth-core.mjs` 共用密碼／Session 規則，`server/d1-store.mjs` 處理非同步資料存取。管理者可透過 `/api/admin/members` 讀取明確允許的會員欄位，不提供密碼雜湊或 Session。
+
+會員登入已在 Cloudflare 執行；本機 SQLite 只供隔離測試與備份，不再是正式資料來源。部署與搬移紀錄見 [D1 文件](cloudflare-d1.md)。下列第 1 階段說明與原提案保留作歷史紀錄。
+
 ## 第 1 階段已實作
 
 無第三方 JavaScript 套件的 HTML／CSS／ES Modules 前端。

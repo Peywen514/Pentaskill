@@ -1,6 +1,9 @@
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { AuthStore } from '../server/auth.mjs';
+import { existsSync } from 'node:fs';
+
+if (!process.env.AUTH_DB_PATH && existsSync(new URL('../deployment.json', import.meta.url))) throw new Error('正式會員已搬至 D1。本機工具請明確設定測試用 AUTH_DB_PATH，避免修改搬移前的備份資料庫。');
 
 const { values } = parseArgs({ options: { email: { type: 'string' }, role: { type: 'string' } }, strict: true });
 if (!values.email || !['student', 'instructor', 'admin'].includes(values.role)) {

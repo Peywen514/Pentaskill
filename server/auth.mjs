@@ -1,44 +1,10 @@
 import { DatabaseSync } from 'node:sqlite';
-import { randomBytes, randomUUID, scrypt as scryptCallback, timingSafeEqual, createHash } from 'node:crypto';
-import { promisify } from 'node:util';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-
-const scrypt = promisify(scryptCallback);
-const SESSION_MS = 8 * 60 * 60 * 1000;
-const COST = { N: 32768, r: 8, p: 3, maxmem: 64 * 1024 * 1024 };
-const digest = value => createHash('sha256').update(value).digest('hex');
-let activeDerivations = 0;
-async function derive(password, salt) {
-  if (activeDerivations >= 2) throw new AuthError('目前登入人數較多，請稍後再試', 429);
-  activeDerivations++;
-  try { return await scrypt(password, salt, 64, COST); } finally { activeDerivations--; }
-}
-export class AuthError extends Error {
-  constructor(message, status = 400) { super(message); this.status = status; }
-}
-export function normalizeEmail(value) {
-  if (typeof value !== 'string') throw new AuthError('請填寫有效的電子郵件');
-  const email = value.trim().toLowerCase();
-  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new AuthError('請填寫有效的電子郵件');
-  return email;
-}
-function validatePassword(password) {
-  if (typeof password !== 'string' || password.length < 8 || password.length > 128) throw new AuthError('密碼需為 8–128 個字元');
-}
-function profile(user) { return { id: user.id, name: user.name, email: user.email, role: user.role, emailVerified: Boolean(user.email_verified) }; }
-export async function hashPassword(password) {
-  validatePassword(password);
-  const salt = randomBytes(16).toString('hex');
-  const hash = await derive(password, salt);
-  return `scrypt$32768$8$3$${salt}$${hash.toString('hex')}`;
-}
-async function verifyPassword(password, stored) {
-  const [algorithm, n, r, p, salt, encoded] = stored.split('$');
-  if (algorithm !== 'scrypt' || n !== '32768' || r !== '8' || p !== '3' || !/^[a-f0-9]{32}$/.test(salt) || !/^[a-f0-9]{128}$/.test(encoded)) return false;
-  const hash = await derive(password, salt);
-  return timingSafeEqual(hash, Buffer.from(encoded, 'hex'));
-}
+import { AuthError, normalizeEmail, validatePassword, profile, hashPassword, verifyPassword, digest, SESSION_MS, sessionToken, sessionCookie } from './auth-core.mjs';
+import { memberQuery, memberProfile } from './d1-store.mjs';
+export { AuthError, normalizeEmail, hashPassword, sessionCookie } from './auth-core.mjs';
 
 export class AuthStore {
   constructor(path = ':memory:') {
@@ -66,6 +32,12 @@ export class AuthStore {
     this.dummyHash = `scrypt$32768$8$3$${randomBytes(16).toString('hex')}$${randomBytes(64).toString('hex')}`;
   }
   close() { this.db.close(); }
+  listMembers(options={}) {
+    const query=memberQuery(options);
+    const total=this.db.prepare(`SELECT count(*) AS total FROM users ${query.where}`).get(...query.values).total;
+    const members=this.db.prepare(`SELECT id,name,email,role,active,email_verified,created_at FROM users ${query.where} ORDER BY created_at DESC,id LIMIT 25 OFFSET ?`).all(...query.values,(query.page-1)*25).map(memberProfile);
+    return {members,total,page:query.page,pageSize:25};
+  }
   // 僅供有後端主機權限的操作工具使用，不公開 HTTP 角色變更端點。
   setRole(email, role) {
     email = normalizeEmail(email);
@@ -134,15 +106,6 @@ export class AuthStore {
   }
 }
 
-export function sessionToken(req, secure = false) {
-  const name = secure ? '__Host-pentaskill_session' : 'pentaskill_session';
-  const matches = (req.headers.cookie ?? '').split(';').map(s => s.trim()).filter(s => s.startsWith(`${name}=`));
-  return matches.length === 1 ? matches[0].slice(name.length + 1) : '';
-}
-export function sessionCookie(token, secure = false, clear = false) {
-  return `${secure ? '__Host-' : ''}pentaskill_session=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${clear ? 0 : SESSION_MS / 1000}${secure ? '; Secure' : ''}`;
-}
-
 export function authHandler(store, { origin, secure = false }) {
   return async (req, res, url) => {
     const send = (status, data, headers = {}) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...headers }); res.end(JSON.stringify(data)); };
@@ -157,6 +120,10 @@ export function authHandler(store, { origin, secure = false }) {
       if (req.method === 'GET' && url.pathname === '/api/admin/status') {
         store.requireRole(token, ['admin']);
         send(200, { access: 'admin', coursePersistenceEnabled: false }); return;
+      }
+      if (req.method === 'GET' && url.pathname === '/api/admin/members') {
+        store.requireRole(token,['admin']);
+        send(200,store.listMembers({search:url.searchParams.get('search')??'',role:url.searchParams.get('role')??'',page:url.searchParams.get('page')??1}));return;
       }
       if (req.method === 'GET' && url.pathname === '/api/instructor/status') {
         store.requireRole(token, ['instructor', 'admin']);

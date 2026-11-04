@@ -156,6 +156,32 @@ function video() {
 
 function admin() {
   main.innerHTML = `<div class="wrap"><div class="page-heading"><span class="eyebrow">COURSE WORKSPACE / PREVIEW</span><h1>把好課，整理得更清楚。</h1><p>管理者身分已驗證。課程管理目前仍為本機體驗，修改只影響此瀏覽器的示範資料。</p></div><p class="note warn">此專區已由後端驗證管理者身分；課程資料庫及操作稽核將於後續階段串接。</p><section class="panel" style="margin:25px 0 40px"><div class="admin-controls"><h2>課程管理</h2><button class="button button-small button-outline" data-action="restore-courses">還原示範課程</button></div><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>課程</th><th>程度</th><th>錄播方案</th><th>陪跑方案</th><th>狀態</th><th>操作</th></tr></thead><tbody>${state.courses.map(c => `<tr><td><strong>${escape(c.title)}</strong><br><small class="muted">${c.id}</small></td><td>${stages[c.stage].short}</td><td>${money(c.price)}</td><td>${money(c.coachingPrice)}</td><td><span class="pill">${c.published ? '上架' : '草稿'}</span></td><td><button class="text-link" data-action="edit-course" data-id="${c.id}">編輯</button></td></tr>`).join('')}</tbody></table></div></section></div>`;
+  const memberLink=document.createElement('a');memberLink.href='#members';memberLink.className='button button-outline';memberLink.textContent='檢閱會員資料 →';main.querySelector('.page-heading').append(memberLink);
+  mountMemberDirectory();
+}
+function members() {
+  main.innerHTML='<div class="wrap"><div class="page-heading"><a class="text-link" href="#admin">← 管理中心</a><h1>會員資料</h1><p>搜尋與檢閱學員、講師及管理者帳號。</p></div></div>';
+  mountMemberDirectory();
+}
+function mountMemberDirectory() {
+  const panel=document.createElement('section');panel.className='panel member-directory';
+  panel.innerHTML='<div class="admin-controls"><h2>會員資料</h2><span class="pill">管理者專用</span></div><form class="member-filters"><label class="field">搜尋姓名或 Email<input name="search" type="search" maxlength="100" placeholder="輸入姓名或 Email"></label><label class="field">身分<select name="role"><option value="">全部身分</option><option value="student">學員</option><option value="instructor">講師</option><option value="admin">管理者</option></select></label><button type="submit" class="button button-small">搜尋</button></form><div class="member-directory-results" aria-live="polite"></div>';
+  main.querySelector('.wrap').append(panel);
+  const form=panel.querySelector('form'),results=panel.querySelector('.member-directory-results');let page=1,generation=0;
+  async function load() {
+    const version=++generation,values=new FormData(form),params=new URLSearchParams({search:values.get('search'),role:values.get('role'),page:String(page)});
+    results.textContent='正在載入會員資料…';
+    try {
+      const data=await request('/api/admin/members?'+params);
+      if(!panel.isConnected||version!==generation)return;
+      results.innerHTML=data.members.length?`<div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>姓名</th><th>Email</th><th>身分</th><th>狀態</th><th>註冊時間（台北）</th></tr></thead><tbody>${data.members.map(user=>`<tr><td>${escape(user.name)}</td><td>${escape(user.email)}</td><td>${roleLabel(user.role)}</td><td>${user.active?'啟用':'停用'}</td><td>${escape(new Date(user.createdAt).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false}))}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">沒有符合條件的會員。</div>';
+      const pager=document.createElement('div');pager.className='member-pagination';
+      const summary=document.createElement('span');summary.textContent=`共 ${data.total} 位會員 · 第 ${data.page} 頁`;pager.append(summary);
+      for(const [label,delta,disabled]of [['上一頁',-1,page<=1],['下一頁',1,page*data.pageSize>=data.total]]){const b=document.createElement('button');b.className='button button-small button-outline';b.type='button';b.textContent=label;b.disabled=disabled;b.addEventListener('click',()=>{page+=delta;load();});pager.append(b);}
+      results.append(pager);
+    }catch(error){if(panel.isConnected&&version===generation)results.textContent=error.message;}
+  }
+  form.addEventListener('submit',e=>{e.preventDefault();page=1;load();});load();
 }
 function editCourse(id) {
   const c = courseById(id); if (!c) return;
@@ -175,8 +201,8 @@ function loginPage(destination = returnAfterLogin, mode = 'login') {
   returnAfterLogin = destination;
   mountAuth(main, { mode, onSuccess: async user => {
     activateAccountDrafts();
-    const destinationAllowed = (returnAfterLogin !== 'admin' || user.role === 'admin') && (returnAfterLogin !== 'instructor' || ['instructor','admin'].includes(user.role));
-    const target = destinationAllowed && ['member','admin','instructor'].includes(returnAfterLogin) ? returnAfterLogin : homeFor(user);
+    const destinationAllowed = (!['admin','members'].includes(returnAfterLogin) || user.role === 'admin') && (returnAfterLogin !== 'instructor' || ['instructor','admin'].includes(user.role));
+    const target = destinationAllowed && ['member','admin','instructor','members'].includes(returnAfterLogin) ? returnAfterLogin : homeFor(user);
     if (location.hash === `#${target}`) await route(); else location.hash = target;
     toast(`登入成功，歡迎回來，${user.name}！`);
   } });
@@ -193,11 +219,11 @@ async function route() {
   const oldVideo = $('#learning-video'); if (oldVideo) oldVideo.pause();
   stopCarousel(); if (modal.open) closeDialog();
   const [page = 'home', id] = location.hash.slice(1).split('/');
-  if (['member','admin','instructor'].includes(page)) {
+  if (['member','admin','instructor','members'].includes(page)) {
     if (!authReady) { main.innerHTML = '<div class="wrap section"><p role="status">正在確認登入狀態…</p></div>'; return; }
     if (!account) { loginPage(page); return; }
     try {
-      await request(page === 'admin' ? '/api/admin/status' : page === 'instructor' ? '/api/instructor/status' : '/api/workspace');
+      await request(['admin','members'].includes(page) ? '/api/admin/status' : page === 'instructor' ? '/api/instructor/status' : '/api/workspace');
       if (version !== routeVersion) return;
     } catch (error) {
       if (version !== routeVersion) return;
@@ -208,9 +234,9 @@ async function route() {
     }
   }
   $$('[data-nav]').forEach(a => { const active = a.dataset.nav === page || (page === 'course' && a.dataset.nav === 'courses'); a.classList.toggle('active', active); if (active) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
-  const handlers = { home, courses: catalog, map, member, coaching, admin, instructor, video, login: () => account ? member() : loginPage(), register: () => account ? member() : loginPage(returnAfterLogin, 'register'), course: () => detail(id) };
+  const handlers = { home, courses: catalog, map, member, coaching, admin, members, instructor, video, login: () => account ? member() : loginPage(), register: () => account ? member() : loginPage(returnAfterLogin, 'register'), course: () => detail(id) };
   (handlers[page] ?? home)();
-  document.title = `${({ home: '學得精 • 學得快 • 學得好', courses: '探索課程', map: 'AI 學習地圖', member: '我的學習', coaching: '1 對 1 個教', admin: '管理中心', instructor: '講師專區', login: '會員登入', register: '加入會員', video: '影片學習體驗', course: '課程介紹' })[page] ?? '首頁'}｜精五門 PentaSkill`;
+  document.title = `${({ home: '學得精 • 學得快 • 學得好', courses: '探索課程', map: 'AI 學習地圖', member: '我的學習', coaching: '1 對 1 個教', admin: '管理中心', members: '會員資料', instructor: '講師專區', login: '會員登入', register: '加入會員', video: '影片學習體驗', course: '課程介紹' })[page] ?? '首頁'}｜精五門 PentaSkill`;
   window.scrollTo({ top: 0, behavior: 'instant' });
 }
 window.addEventListener('hashchange', () => { route(); main.focus({ preventScroll: true }); });

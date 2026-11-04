@@ -9,7 +9,7 @@ const production = process.env.NODE_ENV === 'production';
 const origin = process.env.APP_ORIGIN ?? `http://127.0.0.1:${port}`;
 if (production && (!process.env.APP_ORIGIN || !origin.startsWith('https://'))) throw new Error('Production requires an explicit HTTPS APP_ORIGIN');
 if (new URL(origin).origin !== origin) throw new Error('APP_ORIGIN must contain only scheme and host, without a trailing slash or path');
-const store = new AuthStore(process.env.AUTH_DB_PATH ?? resolve(root, '.data', 'pentaskill.sqlite'));
+const store = new AuthStore(process.env.AUTH_DB_PATH ?? resolve(root, '.data', 'local-dev.sqlite'));
 const auth = authHandler(store, { origin, secure: origin.startsWith('https://') });
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml', '.json': 'application/json; charset=utf-8' };
 const server = createServer(async (req, res) => {

@@ -11,3 +11,11 @@ test('預覽伺服器只提供公開前端檔案並設定安全標頭', async t 
   for (const path of ['/.git/config', '/package.json', '/docs/architecture.md', '/missing', '/src/%5c..%5c.git%5cconfig']) assert.equal((await fetch(`http://127.0.0.1:${port}${path}`)).status, 404);
   assert.equal((await fetch(`http://127.0.0.1:${port}/`, { method: 'POST' })).status, 405);
 });
+
+test('舊本機預覽入口轉向雲端，不再由本機提供正式會員 API',async t=>{
+  const port=4188;
+  const child=spawn(process.execPath,['scripts/preview-cloud.mjs'],{env:{...process.env,PORT:String(port)},stdio:['ignore','pipe','pipe']});t.after(()=>child.kill());
+  await Promise.race([once(child.stdout,'data'),once(child,'exit').then(()=>{throw new Error('Redirect server failed');})]);
+  const response=await fetch(`http://127.0.0.1:${port}/api/auth/session`,{redirect:'manual'});
+  assert.equal(response.status,307);assert.equal(response.headers.get('location'),'https://pentaskill-v2.pey514514.workers.dev/api/auth/session');
+});
