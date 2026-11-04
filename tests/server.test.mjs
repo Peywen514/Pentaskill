@@ -4,7 +4,7 @@ import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 test('預覽伺服器只提供公開前端檔案並設定安全標頭', async t => {
   const port = 4187;
-  const child = spawn(process.execPath, ['scripts/serve.mjs'], { env: { ...process.env, PORT: String(port) }, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, ['scripts/serve.mjs'], { env: { ...process.env, PORT: String(port), NODE_ENV: 'test', APP_ORIGIN: `http://127.0.0.1:${port}`, AUTH_DB_PATH: ':memory:' }, stdio: ['ignore', 'pipe', 'pipe'] });
   t.after(() => child.kill());
   await Promise.race([once(child.stdout, 'data'), once(child, 'exit').then(() => { throw new Error('Preview server exited before ready'); })]);
   for (const path of ['/', '/src/app.js', '/assets/pentaskill-logo-transparent.png']) { const response = await fetch(`http://127.0.0.1:${port}${path}`); assert.equal(response.status, 200); assert.equal(response.headers.get('x-content-type-options'), 'nosniff'); if (path.endsWith('.png')) assert.equal(response.headers.get('content-type'), 'image/png'); }

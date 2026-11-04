@@ -349,6 +349,16 @@
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
 
 /* Readable type and fluid layouts at tablet and phone widths. */
+.account-nav{display:flex;align-items:center;gap:15px}
+.auth-wrap{padding-top:40px;padding-bottom:55px;display:flex;justify-content:center}
+.auth-panel{width:min(100%,520px);padding:38px}
+.auth-panel h1{font-size:30px;margin:12px 0}
+.auth-panel .muted{font-size:17px}
+.auth-panel .form-grid{margin-top:25px}
+.show-password{display:flex;align-items:center;gap:10px;font-size:16px;min-height:44px}
+.show-password input{width:20px;height:20px;accent-color:var(--brand)}
+.auth-switch{font-size:16px;margin:15px 0}
+.account-summary{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:25px;font-size:16px;overflow-wrap:anywhere}
 .hero h1.brand-headline{font-size:clamp(27px,3.1vw,44px);line-height:1.6;letter-spacing:-1px;white-space:nowrap}
 .brand-logo{width:88px;height:88px}
 .site-footer .brand-logo{width:72px;height:72px}
@@ -421,6 +431,11 @@
   .site-footer{gap:25px}
 }
 @media(max-width:480px){
+  .auth-wrap{padding-top:20px}
+  .auth-panel{padding:25px 20px}
+  .auth-panel h1{font-size:26px}
+  .account-nav{gap:9px}
+  .account-logout{font-size:14px}
   .hero h1.brand-headline{font-size:clamp(27px,7.3vw,34px)}
   .wrap{padding-right:16px;padding-left:16px}
   .brand{gap:8px}
