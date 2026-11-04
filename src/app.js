@@ -281,3 +281,5 @@ refreshSession().then(() => { authReady = true; activateAccountDrafts(); route()
 window.addEventListener('focus', async () => { const previous = account?.id; await refreshSession(); authReady = true; activateAccountDrafts(); if (previous !== account?.id) route(); });
 
 window.addEventListener('resize', () => { if (document.querySelector('#featured-grid')) renderFeatured(); });
+
+$('.social-message-close')?.addEventListener('click', () => { $('#social-message').hidden = true; });

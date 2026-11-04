@@ -483,3 +483,10 @@
 @media(max-width:1024px){.site-header nav{gap:8px}.site-header nav a{padding:10px}}
 @media(max-width:760px){.site-header nav{gap:7px}.site-header nav a{font-size:16px;padding:9px 4px}.floating-social-widget{right:14px;bottom:16px;gap:8px}}
 @media(prefers-reduced-motion:reduce){.social-btn,.site-header nav a{transition:none}}
+
+.floating-social-widget{align-items:flex-end}
+.social-message{position:relative;width:min(270px,calc(100vw - 28px));padding:14px 40px 14px 16px;border:1px solid #d4c0ed;border-radius:14px;background:#fff;color:#392c52;box-shadow:0 8px 25px #38205330;font-size:16px;line-height:1.7}
+.social-message[hidden]{display:none}
+.social-message strong{color:#7138c9}
+.social-message-close{position:absolute;right:4px;top:4px;display:grid;place-items:center;min-width:36px;min-height:36px;padding:0;border:0;border-radius:8px;background:transparent;color:#625471;font-size:23px;line-height:1}
+.social-message-close:hover{background:#f0e7fa}
