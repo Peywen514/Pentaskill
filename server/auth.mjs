@@ -57,11 +57,33 @@ export class AuthStore {
       );
       CREATE INDEX IF NOT EXISTS sessions_user ON sessions(user_id);
       CREATE TABLE IF NOT EXISTS auth_limits (key TEXT PRIMARY KEY, count INTEGER NOT NULL, until_at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS role_changes (
+        id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id),
+        previous_role TEXT NOT NULL, new_role TEXT NOT NULL, changed_at INTEGER NOT NULL
+      );
     `);
     // 不存在的帳號也執行同等成本的密碼運算，不在回應中洩漏帳號是否存在。
     this.dummyHash = `scrypt$32768$8$3$${randomBytes(16).toString('hex')}$${randomBytes(64).toString('hex')}`;
   }
   close() { this.db.close(); }
+  // 僅供有後端主機權限的操作工具使用，不公開 HTTP 角色變更端點。
+  setRole(email, role) {
+    email = normalizeEmail(email);
+    if (!['student', 'instructor', 'admin'].includes(role)) throw new AuthError('無效的帳號身分');
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      const user = this.db.prepare('SELECT * FROM users WHERE email=? AND active=1').get(email);
+      if (!user) throw new AuthError('找不到已註冊的有效帳號，請先註冊', 404);
+      if (user.role !== role) {
+        if (user.role === 'admin' && this.db.prepare("SELECT count(*) AS total FROM users WHERE role='admin' AND active=1").get().total <= 1) throw new AuthError('不可移除最後一位有效管理者');
+        this.db.prepare('UPDATE users SET role=? WHERE id=?').run(role, user.id);
+        this.db.prepare('DELETE FROM sessions WHERE user_id=?').run(user.id);
+        this.db.prepare('INSERT INTO role_changes(id,user_id,previous_role,new_role,changed_at) VALUES (?,?,?,?,?)').run(randomUUID(), user.id, user.role, role, Date.now());
+      }
+      this.db.exec('COMMIT');
+      return profile(this.db.prepare('SELECT * FROM users WHERE id=?').get(user.id));
+    } catch (error) { this.db.exec('ROLLBACK'); throw error; }
+  }
   limit(key, maximum, now = Date.now()) {
     const until = now + 15 * 60 * 1000;
     const row = this.db.prepare(`INSERT INTO auth_limits(key,count,until_at) VALUES (?,1,?)

@@ -33,6 +33,14 @@ npm run account:create
 
 此管理工具以後端主機存取權為信任邊界，不開放到公開 HTTP。正式多人營運前還需管理者邀請、稽核、角色異動與帳號停用操作介面。
 
+已註冊帳號可由主機操作人員設定角色：
+
+```sh
+npm run account:role -- --email 已註冊信箱 --role admin
+```
+
+此命令不修改密碼、不建立不存在的帳號，變更會記錄於 role_changes，並撤銷該帳號的舊 Session；使用者需重新登入。不得移除最後一位有效管理者。沒有公開角色變更 API，也不依 Email 自動賦予管理權限。
+
 ## 已實作的保護
 
 - Node scrypt：N=32768、r=8、p=3，16 bytes 隨機 Salt；密碼長度 12–128 字元，不自動 trim 密碼。

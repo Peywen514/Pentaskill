@@ -1,6 +1,6 @@
 {
   "name": "pentaskill-next",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "description": "精五門 Pentaskill 新版：第一階段互動驗收原型",
@@ -10,7 +10,8 @@
     "test": "node --test tests/*.test.mjs",
     "check": "node scripts/check.mjs",
     "build": "node scripts/build.mjs",
-    "account:create": "node scripts/create-account.mjs"
+    "account:create": "node scripts/create-account.mjs",
+    "account:role": "node scripts/set-role.mjs"
   },
   "engines": {
     "node": ">=24"

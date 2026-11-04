@@ -38,6 +38,23 @@ test('HTTPS Cookie 有 HttpOnly、SameSite、Secure、__Host 及登出清除設�
   const cookie = sessionCookie('test', true); assert.match(cookie, /^__Host-/); assert.match(cookie, /HttpOnly/); assert.match(cookie, /SameSite=Strict/); assert.match(cookie, /; Secure/); assert.doesNotMatch(cookie, /Domain=/); assert.match(sessionCookie('', true, true), /Max-Age=0/);
 });
 
+test('角色變更保留原密碼、撤銷舊 Session 並留下紀錄，不建立未知帳號', async () => {
+  const store = new AuthStore();
+  try {
+    const user = await store.createUser(userData()); const token = store.createSession(user.id);
+    const hash = store.db.prepare('SELECT password_hash FROM users WHERE id=?').get(user.id).password_hash;
+    assert.equal(store.setRole(user.email, 'admin').role, 'admin');
+    assert.equal(store.userFromToken(token), null);
+    assert.equal(store.db.prepare('SELECT password_hash FROM users WHERE id=?').get(user.id).password_hash, hash);
+    assert.equal((await store.login({ email: user.email, password: secret }, 'promote')).role, 'admin');
+    assert.equal(store.db.prepare('SELECT count(*) AS total FROM role_changes').get().total, 1);
+    assert.throws(() => store.setRole('missing@example.test', 'admin'), error => error.status === 404);
+    assert.throws(() => store.setRole(user.email, 'student'));
+    assert.equal(store.setRole(user.email, 'admin').role, 'admin');
+    assert.equal(store.db.prepare('SELECT count(*) AS total FROM role_changes').get().total, 1);
+  } finally { store.close(); }
+});
+
 test('拒絕弱密碼、重複信箱與無效帳號資料', async () => {
   const store = new AuthStore();
   try {
