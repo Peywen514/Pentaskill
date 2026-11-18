@@ -1,6 +1,7 @@
 import { initialCourses, stages, questions, quests } from './catalog.js';
 import { assess, awardQuest, experience, pricePlan, createPreviewOrder, validateCourse, validateBooking, dateInTaipei } from './domain.js';
 import { account, authAvailable, refreshSession, signOut, request, homeFor, roleLabel, updateAccountNav, mountAuth } from './auth.js';
+import { mountCloudAdmin } from './cloud-admin.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -11,6 +12,10 @@ const symbols = ['✦', '◈', '⚒', '⌘'];
 const emptyState = () => ({ completed: [], assessment: null, orders: [], bookings: [], progress: 0, courses: structuredClone(initialCourses) });
 let state = emptyState();
 let storageAvailable = true;
+let publishedCatalog = null, catalogCategories = [];
+let favoriteIds = new Set();
+async function loadCatalog() { const data = await request('/api/catalog'); publishedCatalog = data.courses; catalogCategories = data.categories; }
+async function loadLearning() { if (!account) { favoriteIds.clear(); return; } const userId = account.id, [data,favorites] = await Promise.all([request('/api/learning'),request('/api/favorites')]); if (account?.id !== userId) return; favoriteIds = new Set(favorites.favorites); state.completed = data.completed; state.answers = data.answers; state.assessment = data.answers ? assess(data.answers) : null; mapStage = state.assessment?.stage ?? 0; }
 function readDrafts(key) {
 storageKey = key;
 state = emptyState();
@@ -33,8 +38,8 @@ readDrafts(STORE);
 let filter = 'all', search = '', carouselIndex = 0, carouselTimer, mapStage = state.assessment?.stage ?? 0, quizAnswers = [], quizIndex = 0, toastTimer;
 const money = n => `NT$ ${Number(n).toLocaleString('zh-TW')}`;
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const visibleCourses = () => state.courses.filter(c => c.published);
-const courseById = id => state.courses.find(c => c.id === id);
+const visibleCourses = () => (publishedCatalog ?? state.courses).filter(c => c.published);
+const courseById = id => (publishedCatalog ?? state.courses).find(c => c.id === id);
 function save() {
   try { localStorage.setItem(storageKey, JSON.stringify({ ...state, version: 1 })); }
   catch { storageAvailable = false; toast('瀏覽器無法保存紀錄；本次操作僅保留到頁面關閉。'); }
@@ -56,21 +61,46 @@ function art(kind) {
   };
   return start + (arts[kind] ?? arts.prompt) + end;
 }
-function courseVisual(c, extra = '') { return `<div class="course-visual ${c.color} ${extra}"><span class="visual-label">${escape(c.badge)}</span>${art(c.art)}<span class="visual-number">PENTASKILL / 0${c.stage + 1}</span></div>`; }
-function courseCard(c) { return `<article class="course-card">${courseVisual(c)}<div class="course-body"><div class="course-category"><span>${escape(c.category)}</span><span>LEVEL 0${c.stage + 1}</span></div><h3><a href="#course/${c.id}">${escape(c.title)}</a></h3><div class="course-meta"><span>◷ ${c.duration}</span><span>▤ ${c.lessons} 個單元</span></div><div class="course-bottom"><span class="price"><small>NT$</small>${c.price.toLocaleString('zh-TW')}</span><a href="#course/${c.id}" class="text-link" aria-label="了解課程：${escape(c.title)}">了解課程 ↗</a></div></div></article>`; }
+function courseVisual(c, extra = '') { const image = ({prompt:1,nodes:2,workflow:3,code:4})[c.art] ?? 1; return `<div class="course-visual ${c.color} ${extra}"><span class="visual-label">${escape(c.badge)}</span><img class="course-photo" src="assets/course-${image}.png" alt=""><span class="visual-number">PENTASKILL / 0${c.stage + 1}</span></div>`; }
+function courseCard(c) { const followed=favoriteIds.has(c.id);return `<article class="course-card">${courseVisual(c)}<div class="course-body"><div class="course-category"><span>${escape(c.category)}</span><button type="button" class="favorite-button" data-action="favorite" data-id="${escape(c.id)}" aria-pressed="${followed}" aria-label="${followed?'取消追蹤':'追蹤'}：${escape(c.title)}" title="${followed?'取消追蹤':'追蹤課程'}">${followed?'♥':'♡'}</button></div><h3><a href="#course/${c.id}">${escape(c.title)}</a></h3><div class="course-meta"><span>◷ ${escape(c.duration)}</span><span>▤ ${c.lessons} 個單元</span></div><div class="course-bottom"><span class="price"><small>NT$</small>${c.price.toLocaleString('zh-TW')}</span><a href="#course/${c.id}" class="text-link" aria-label="了解課程：${escape(c.title)}">了解課程 ↗</a></div></div></article>`; }
 function teaserMap() { return `<div class="path-line">${stages.map((s, i) => `<a class="path-step" href="#map">${stageIcon(i)}<strong>${s.short}</strong><small>LEVEL ${s.number}</small></a>`).join('')}</div>`; }
-function heroArt() { return `<div class="hero-art" aria-label="從新手到開發者的四階段學習路徑插畫"><div class="learning-window"><div class="window-top"><span>● ● ●</span><span>YOUR LEARNING JOURNEY ↗</span></div><div class="window-heading">每個高手，都曾是新手。<small>你的下一步，從這裡開始。</small></div><div class="mini-map">${stages.map((s, i) => `<div class="mini-node" style="--y:${25 - i * 15}px"><b>${symbols[i]}</b><span>${s.short}</span></div>`).join('')}</div><div class="window-progress"><span></span></div><div class="window-bottom"><span>STEP BY STEP. SKILL BY SKILL.</span><span>01 / 04</span></div></div><div class="float-card float-one"><div class="float-icon">✧</div><div><strong>找到自己的起點</strong><span>6 題小測驗，開啟學習旅程</span></div></div><div class="float-card float-two"><div class="float-icon">⚑</div><div><strong>小小闖關，大大進步</strong><span>完成任務 · 累積你的 XP</span></div></div><div class="art-caption">A LITTLE PRACTICE. A NEW POSSIBILITY.</div></div>`; }
+function heroArt() { return `<div class="hero-art" aria-label="課程學習筆記示意"><div class="workshop-sheet"><div class="workshop-top"><span>精五門　學習筆記</span><span>課程內容示意</span></div><h2>把問題說清楚</h2><p>從第一個好問題開始，練習讓 AI 理解你的需求。</p><ol><li><b>描述任務</b><small>說明你希望完成什麼</small></li><li><b>補足情境與限制</b><small>提供背景、格式與需要注意的細節</small></li><li><b>檢查與調整</b><small>查核回答，再依需求修改</small></li></ol></div></div>`; }
+
+let bannerTimer;
+function mountCourseBanner() {
+  clearInterval(bannerTimer);
+  const courses = visibleCourses().filter(c => c.featured !== false);
+  const hero = $('.hero');
+  if (!hero || !courses.length) return;
+  const banner = document.createElement('section');
+  banner.className = 'featured-banner';
+  banner.setAttribute('aria-label', '精選課程輪播');
+  hero.before(banner);
+  let current = 0, paused = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const paint = () => {
+    const c = courses[current], image = ({ prompt: 1, nodes: 2, workflow: 3, code: 4 })[c.art] ?? 1;
+    banner.innerHTML = `<img src="assets/course-${image}.png" alt=""><div class="featured-banner-copy"><span>精五門精選課程</span><h2>${escape(c.title)}</h2><p>${escape(c.subtitle)}</p><a class="button button-light" href="#course/${escape(c.id)}">查看課程 →</a></div><div class="featured-banner-controls"><button type="button" data-banner="previous" aria-label="上一張">←</button><span aria-live="polite">${current + 1} / ${courses.length}</span><button type="button" data-banner="next" aria-label="下一張">→</button><button type="button" data-banner="pause" aria-label="${paused ? '播放輪播' : '暫停輪播'}" aria-pressed="${paused}">${paused ? '▷' : 'Ⅱ'}</button></div>`;
+  };
+  const start = () => { clearInterval(bannerTimer); if (!paused && courses.length > 1 && !document.hidden && !banner.matches(':hover') && !banner.contains(document.activeElement)) bannerTimer = setInterval(() => { if (!modal.open && !document.hidden) { current = (current + 1) % courses.length; paint(); } }, 6000); };
+  banner.addEventListener('click', e => { const action = e.target.closest('[data-banner]')?.dataset.banner; if (!action) return; if (action === 'pause') paused = !paused; else current = (current + (action === 'next' ? 1 : courses.length - 1)) % courses.length; paint(); banner.querySelector(`[data-banner="${action}"]`)?.focus({ preventScroll: true }); start(); });
+  banner.addEventListener('mouseenter', () => clearInterval(bannerTimer));
+  banner.addEventListener('mouseleave', start);
+  banner.addEventListener('focusin', () => clearInterval(bannerTimer));
+  banner.addEventListener('focusout', e => { if (!banner.contains(e.relatedTarget)) start(); });
+  paint(); start();
+}
 
 function home() {
-  main.innerHTML = `<div class="wrap"><section class="hero"><div class="hero-copy"><div class="hero-tag"><span>✦</span> 上班族進修 × 銀髮族樂學</div><h1 class="brand-headline">學得精 • 學得快 • <em>學得好</em></h1><p>零基礎也能輕鬆上手！專為上班族與樂活銀髮族打造，金牌業師 1 對 1 耐心帶練，學會實用技能，做出自己的精彩作品。</p><div class="hero-buttons"><a class="button" href="#courses">探索精選課程 <span>↗</span></a><button class="text-link" data-action="quiz">AI 學習起點小測驗 →</button></div><div class="hero-caption"><span>✓ 多元實用課程</span><span>✓ 業師耐心帶練</span><span>✓ 依自己的步調學</span></div></div>${heroArt()}</section><div class="trust-strip"><span><b>◈</b> 清楚分級，不再盲目選課</span><span><b>⌘</b> 從觀念走向真實作品</span><span><b>⚑</b> 任務闖關，看見每次進步</span><span><b>◎</b> 1 對 1，卡關有人陪</span></div><section class="section" aria-labelledby="featured-title"><div class="section-head"><div><span class="section-kicker">CURATED FOR YOUR NEXT STEP</span><h2 id="featured-title">下一個技能，從這堂開始</h2><p>依照興趣與程度，找到適合自己的課程。</p></div><a class="text-link" href="#courses">探索所有課程 ↗</a></div><div class="section-head"><div class="filter-row">${filters()}</div><div class="carousel-controls" aria-label="精選課程輪播"><button class="icon-button" data-action="prev-slide" aria-label="上一組精選課程">←</button><small id="slide-label"></small><button class="icon-button" data-action="next-slide" aria-label="下一組精選課程">→</button><button class="icon-button" id="carousel-pause" data-action="pause-carousel" aria-label="暫停自動輪播">Ⅱ</button></div></div><div class="course-grid" id="featured-grid"></div></section><section class="path-teaser"><div><span class="section-kicker">YOUR PERSONAL LEARNING MAP</span><h2>想學 AI，<br>從哪裡開始？</h2><p>6 道小題找到起點，跟著地圖輕鬆練習。</p><a class="text-link" href="#map">打開我的學習地圖 →</a></div>${teaserMap()}</section><section class="coaching-teaser"><div class="coaching-graphic" aria-hidden="true">◎</div><div><span class="section-kicker">A LITTLE GUIDANCE, A BIG DIFFERENCE</span><h3>遇到卡關，不用一個人硬撐。</h3><p>帶著問題來，和業師一起拆解。透過 Zoom，專注在真正的學習。</p></div><a class="button button-outline" href="#coaching">認識 1 對 1 個教 ↗</a></section></div>`;
+  main.innerHTML = `<div class="wrap"><section class="hero"><div class="hero-copy"><div class="hero-tag">上班族進修 × 銀髮族樂學</div><h1 class="brand-headline">學得精 • 學得快 • <em>學得好</em></h1><p>零基礎也能輕鬆上手！專為上班族與樂活銀髮族打造，金牌業師 1 對 1 耐心帶練，學會實用技能，做出自己的精彩作品。</p><div class="hero-buttons"><a class="button" href="#courses">探索精選課程 <span>↗</span></a><button class="text-link" data-action="quiz">AI 學習起點小測驗 →</button></div><div class="hero-caption"><span>✓ 多元實用課程</span><span>✓ 業師耐心帶練</span><span>✓ 依自己的步調學</span></div></div>${heroArt()}</section><div class="trust-strip"><span><b>◈</b> 清楚分級，不再盲目選課</span><span><b>⌘</b> 從觀念走向真實作品</span><span><b>⚑</b> 任務闖關，看見每次進步</span><span><b>◎</b> 1 對 1，卡關有人陪</span></div><section class="section" aria-labelledby="featured-title"><div class="section-head"><div><span class="section-kicker">精選課程</span><h2 id="featured-title">下一個技能，從這堂開始</h2><p>依照興趣與程度，找到適合自己的課程。</p></div><a class="text-link" href="#courses">探索所有課程 ↗</a></div><div class="section-head"><div class="filter-row">${filters()}</div><div class="carousel-controls" aria-label="精選課程輪播"><button class="icon-button" data-action="prev-slide" aria-label="上一組精選課程">←</button><small id="slide-label"></small><button class="icon-button" data-action="next-slide" aria-label="下一組精選課程">→</button><button class="icon-button" id="carousel-pause" data-action="pause-carousel" aria-label="暫停自動輪播">Ⅱ</button></div></div><div class="course-grid" id="featured-grid"></div></section><section class="path-teaser"><div><h2>想學 AI，<br>從哪裡開始？</h2><p>6 道小題找到起點，跟著地圖輕鬆練習。</p><a class="text-link" href="#map">打開我的學習地圖 →</a></div>${teaserMap()}</section><section class="coaching-teaser"><div class="coaching-graphic" aria-hidden="true">◎</div><div><h3>遇到卡關，不用一個人硬撐。</h3><p>帶著問題來，和業師一起拆解。透過 Zoom，專注在真正的學習。</p></div><a class="button button-outline" href="#coaching">認識 1 對 1 個教 ↗</a></section></div>`;
   renderFeatured();
+  mountCourseBanner();
   const grid = $('#featured-grid');
   grid.addEventListener('mouseenter', stopCarousel);
   grid.addEventListener('focusin', stopCarousel);
   startCarousel();
 }
-function filters() { return [{ id: 'all', name: '全部課程' }, ...stages.map((s, i) => ({ id: String(i), name: s.short }))].map(f => `<button class="filter ${filter === f.id ? 'active' : ''}" data-action="filter" data-filter="${f.id}" aria-pressed="${filter === f.id}">${f.name}</button>`).join(''); }
-function filtered() { return visibleCourses().filter(c => (filter === 'all' || String(c.stage) === filter) && (!search || `${c.title} ${c.category} ${c.subtitle}`.toLowerCase().includes(search.toLowerCase()))); }
+function filters() { return [{ id: 'all', name: '全部課程' }, ...(publishedCatalog ? catalogCategories : stages.map((s, i) => ({ id: String(i), name: s.short })))].map(f => `<button class="filter ${filter === f.id ? 'active' : ''}" data-action="filter" data-filter="${escape(f.id)}" aria-pressed="${filter === f.id}">${escape(f.name)}</button>`).join(''); }
+function filtered() { return visibleCourses().filter(c => (filter === 'all' || (publishedCatalog ? c.categoryId : String(c.stage)) === filter) && (!search || `${c.title} ${c.category} ${c.subtitle}`.toLowerCase().includes(search.toLowerCase()))); }
 function renderFeatured() {
   const list = filtered(), grid = $('#featured-grid');
   if (!grid) return;
@@ -95,7 +125,9 @@ function renderCatalog() { $('#catalog-grid').innerHTML = filtered().map(courseC
 function detail(id) {
   const c = courseById(id);
   if (!c?.published) { main.innerHTML = '<div class="wrap section"><div class="empty">這門課目前未上架。<a class="text-link" href="#courses">回到課程商城 →</a></div></div>'; return; }
-  main.innerHTML = `<div class="wrap"><div class="page-heading"><a href="#courses" class="text-link">← 所有課程</a><p class="section-kicker">LEVEL 0${c.stage + 1} / ${escape(c.category)}</p><h1>${escape(c.title)}</h1><p>${escape(c.description)}</p></div><div class="two-col"><div>${courseVisual(c, 'course-detail-art')}<div class="panel"><h3>練完這堂課，你可以……</h3><ul>${c.outcomes.map(s => `<li>${escape(s)}</li>`).join('')}</ul><p>${c.duration} · ${c.lessons} 個單元 · ${escape(c.instructor)}</p><button class="text-link" data-action="video">先看一段播放示範 →</button></div></div><div class="panel"><span class="section-kicker">CHOOSE YOUR LEARNING PACE</span><h3>選一種，適合自己的學法。</h3>${planChoices(c)}<p class="note">陪跑方案包含本課程錄播＋${c.credits} 堂 60 分鐘 Zoom 個教。錄播方案不含個教；遊戲 XP 不作現金折抵。價格為待確認的示範價格。</p><button class="button" data-action="order" data-id="${c.id}">查看方案摘要 ↗</button><button class="text-link" data-action="quote" data-id="${c.id}">需要不同堂數？規劃客製報價 →</button></div></div></div>`;
+  main.innerHTML = `<div class="wrap"><div class="page-heading"><a href="#courses" class="text-link">← 所有課程</a><p class="section-kicker">LEVEL 0${c.stage + 1} / ${escape(c.category)}</p><h1>${escape(c.title)}</h1><p>${escape(c.description)}</p></div><div class="two-col"><div>${courseVisual(c, 'course-detail-art')}<div class="panel"><h3>練完這堂課，你可以……</h3><ul>${c.outcomes.map(s => `<li>${escape(s)}</li>`).join('')}</ul><p>${escape(c.duration)} · ${c.lessons} 個單元 · ${escape(c.instructor)}</p><button class="text-link" data-action="video">先看一段播放示範 →</button></div></div><div class="panel"><span class="section-kicker">CHOOSE YOUR LEARNING PACE</span><h3>選一種，適合自己的學法。</h3>${planChoices(c)}<p class="note">陪跑方案包含本課程錄播＋${c.credits} 堂 60 分鐘 Zoom 個教。錄播方案不含個教；遊戲 XP 不作現金折抵。價格為待確認的示範價格。</p><button class="button" data-action="order" data-id="${c.id}">查看方案摘要 ↗</button><button class="text-link" data-action="quote" data-id="${c.id}">需要不同堂數？規劃客製報價 →</button></div></div></div>`;
+  const page=main.querySelector('.two-col > .panel');
+  request('/api/payments/status').then(status=>{if(!page?.isConnected||!status.stageAvailable)return;const box=document.createElement('div');box.className='note warn';const text=document.createElement('p');text.textContent='綠界測試環境：只用於測試錄播方案，不會進行正式收款。';const button=document.createElement('button');button.type='button';button.className='button button-outline';button.dataset.action='stage-checkout';button.dataset.id=c.id;button.textContent='前往綠界測試付款';box.append(text,button);page.append(box)}).catch(()=>{});
 }
 function planChoices(c) { return `<div class="plan-options"><label class="plan-option"><input type="radio" name="plan" value="recorded" checked> 錄播自學<strong>${money(c.price)}</strong><small>本課程所有錄播單元<br>依自己的步調練習<br>不含個教堂數</small></label><label class="plan-option"><input type="radio" name="plan" value="coaching"> 業師陪跑<strong>${money(c.coachingPrice)}</strong><small>錄播課程＋${c.credits} 堂個教<br>每堂 60 分鐘，Zoom 進行<br>以付款後核發的堂數預約</small></label></div>`; }
 function previewOrder(id) {
@@ -124,8 +156,10 @@ function quizQuestion() {
   const q = questions[quizIndex];
   openDialog(`<span class="section-kicker">找到起點小測驗 · ${quizIndex + 1} / ${questions.length}</span><div class="quiz-progress" aria-label="第 ${quizIndex + 1} 題，共 ${questions.length} 題">${questions.map((_, i) => `<span class="${i <= quizIndex ? 'filled' : ''}"></span>`).join('')}</div><h2 id="modal-title" class="modal-heading">${q.title}</h2><p class="modal-subtitle">選最接近你判斷的答案。不確定也沒關係，這是幫你找起點。</p><div class="quiz-options">${q.choices.map((choice, i) => `<button class="quiz-option ${quizAnswers[quizIndex] === i ? 'selected' : ''}" data-action="quiz-answer" data-answer="${i}" aria-pressed="${quizAnswers[quizIndex] === i}"><span class="quiz-letter">${'ABC'[i]}</span>${choice}</button>`).join('')}</div><div class="modal-actions">${quizIndex ? '<button class="button button-outline" data-action="quiz-back">← 上一題</button>' : ''}<button class="button" data-action="quiz-next" ${quizAnswers[quizIndex] === undefined ? 'disabled' : ''}>${quizIndex === questions.length - 1 ? '查看我的學習起點' : '下一題 →'}</button></div>`);
 }
-function quizResult() {
-  const result = assess(quizAnswers); state.assessment = result; state.answers = [...quizAnswers]; mapStage = result.stage; save();
+async function quizResult() {
+  const result = assess(quizAnswers);
+  if (account) { try { await request('/api/learning/assessment', { method: 'POST', data: { answers: quizAnswers } }); } catch (error) { toast(`測驗未同步：${error.message}`); return; } }
+  state.assessment = result; state.answers = [...quizAnswers]; mapStage = result.stage; save();
   openDialog(`<span class="section-kicker">YOUR JOURNEY STARTS HERE</span><h2 id="modal-title" class="modal-heading">從「${stages[result.stage].name}」出發，<br>剛剛好。</h2><p class="modal-subtitle">這次答對 ${result.correct} / ${result.total} 題。依最早出現的基礎缺口安排起點；這不是證照評量，也不限制你選其他課程。</p><div class="result-bars">${stages.map((s, i) => `<div><span>${s.skill}</span><div class="progress-track"><span style="width:${result.mastery[i] * 100}%"></span></div><span>${result.scores[i]}/${result.totals[i]}</span></div>`).join('')}</div><div class="success-box">下一步：${stages[result.stage].description}</div><div class="modal-actions"><button class="button" data-action="quiz-go-map">打開我的學習地圖 ↗</button><button class="text-link" data-action="quiz">重新測驗</button></div>`);
 }
 function quest(index) {
@@ -138,6 +172,11 @@ function member() {
   main.innerHTML = `<div class="wrap"><div class="page-heading"><span class="eyebrow">A LITTLE PROGRESS, EVERY DAY</span><h1>歡迎回來，${escape(account.name)}。</h1><p>不用一步到位。今天再前進一小步，就很好。</p></div><div class="account-summary"><span>${escape(account.email)}</span><span class="pill">${roleLabel(account.role)}</span></div><div class="member-layout"><aside class="panel member-side"><div class="avatar" aria-hidden="true">✦</div><h3>${escape(account.name)}</h3><span class="pill">${roleLabel(account.role)}</span><div class="side-links"><a href="#member">◷ 我的學習紀錄</a><a href="#map">⚑ 地圖與成就</a><a href="#coaching">◎ 個教預約</a><button class="text-link" data-action="reset">清除這台裝置的體驗紀錄</button></div></aside><div><div class="stats-grid"><div class="stat"><strong>${xp}<small> XP</small></strong><span>累積學習經驗</span></div><div class="stat"><strong>${state.completed.length}<small> / 4</small></strong><span>已完成暖身任務</span></div><div class="stat"><strong>${state.bookings.length}</strong><span>體驗預約草稿</span></div></div><h3>繼續你的學習</h3><div class="continue-card">${courseVisual(c)}<div class="continue-copy"><span class="section-kicker">免費播放體驗 · 不代表已購課</span><h3>先感受一下，自己的學習節奏。</h3><p class="muted" style="font-size:14px;margin-bottom:0">使用公開示範影片體驗播放與進度記憶。</p><div class="progress-track"><span style="width:${progress}%"></span></div><button class="button button-small" data-action="video">${progress > 0 && progress < 100 ? '接續播放' : '開啟播放體驗'} ↗</button><small class="muted"> 已看 ${progress}%</small></div></div><div class="two-col"><div class="panel"><h3>我的方案草稿</h3>${state.orders.length ? state.orders.slice().reverse().map(o => `<div class="order-item"><strong>${escape(courseById(o.courseId)?.title)}</strong>${o.kind === 'coaching' ? '錄播＋個教' : '錄播自學'} · ${money(o.amount)}<br><small>草稿 · 未付款 · 未開通授權</small></div>`).join('') : '<div class="empty">還沒有方案草稿。<br><a class="text-link" href="#courses">探索適合的課程 →</a></div>'}</div><div class="panel"><h3>下一站，去哪裡？</h3><p>${state.assessment ? `你的推薦起點是「${stages[state.assessment.stage].name}」，先挑戰一個暖身任務吧。` : '先用 6 道情境題找到學習起點，再挑選適合自己的課程。'}</p><a href="#map" class="button button-outline">前往學習地圖 ↗</a></div></div><p class="note">${storageAvailable ? '帳號已登入。這些學習體驗與草稿紀錄目前僅存於本機，尚未跨裝置同步。' : '目前瀏覽器儲存不可用，體驗紀錄只會保留到頁面關閉。'}</p></div></div></div>`;
 }
 
+async function mountMyCourses() {
+  const parent = $('.member-layout > div'); if (!parent) return;
+  const panel = document.createElement('section'); panel.className='panel'; panel.innerHTML='<h2>我的課程</h2><p role="status">正在載入課程授權…</p>'; parent.prepend(panel);
+  try { const data=await request('/api/my-courses'); if(!panel.isConnected)return; const status=panel.querySelector('p'); if(!data.courses.length){status.textContent='目前沒有已開通的課程。';return;} status.remove(); for(const c of data.courses){const row=document.createElement('div');row.className='order-item';const title=document.createElement('strong');title.textContent=c.title;const meta=document.createElement('span');meta.textContent=`已開通 · 進度 ${c.progress}%`;row.append(title,meta);panel.append(row);} } catch(error){if(panel.isConnected)panel.querySelector('p').textContent=`無法載入課程：${error.message}`;}
+}
 function coaching() {
   const min = dateInTaipei(new Date(Date.now() + 73 * 3600 * 1000));
   main.innerHTML = `<div class="wrap"><div class="page-heading"><span class="eyebrow">YOUR NEXT BREAKTHROUGH, TOGETHER</span><h1>帶著問題來，<br>帶著下一步回去。</h1><p>1 對 1 個教，透過 Zoom 和業師專注討論你的作品與卡關。影音由外部平台承載，精五門負責課程、堂數與預約管理。</p></div><div class="two-col"><div class="panel"><span class="section-kicker">HOW IT WORKS</span><h3>把時間留給真正的練習。</h3><ul><li>選購含個教的方案，付款確認後取得堂數。</li><li>選擇業師時段，附上主題與希望獲得的協助。</li><li>預約確認後，在私人預約頁取得 Zoom 連結。</li><li>準時加入，每堂 60 分鐘，聚焦解決一個問題。</li></ul><p class="note">暫定規則：提前 72 小時預約；課前 48 小時可改期或取消並歸還堂數。正式規則將於營運驗收確認。會議使用等候室與密碼，連結不公開展示。</p><button class="text-link" data-action="quote">先規劃我的個教方案 →</button></div><div class="panel"><span class="section-kicker">TRY THE BOOKING FLOW</span><h3>試排一堂，看看流程。</h3><form id="booking-form" class="form-grid"><label class="field">業師<select name="instructor"><option value="mentor-ai">AI 實作業師 · 示範排班</option></select></label><div class="form-row"><label class="field">日期<input name="date" type="date" min="${min}" value="${min}" required></label><label class="field">時段（台北時間）<select name="slot"><option value="14:00">14:00–15:00</option><option value="16:00">16:00–17:00</option><option value="19:00">19:00–20:00</option></select></label></div><label class="field">這次想一起解決什麼？<textarea name="topic" minlength="4" maxlength="500" required placeholder="例如：想請老師檢視我的自動化流程，看看錯誤處理可以怎麼改善。"></textarea></label><p class="note warn">這是預約流程體驗，不會保留真實時段、不會扣堂數，也不會寄信或建立 Zoom 會議。</p><button class="button" type="submit">保存體驗預約草稿 ↗</button><p id="booking-error" class="error-text" role="alert"></p></form></div></div><section class="panel" style="margin-bottom:40px"><h3>我的體驗預約</h3><div id="booking-list">${bookingList()}</div></section></div>`;
@@ -154,11 +193,12 @@ function video() {
   v.addEventListener('error', () => { $('#video-status').textContent = '示範影片暫時無法載入，請確認網路連線後重試。'; });
 }
 
-function admin() {
+function legacyAdmin() {
   main.innerHTML = `<div class="wrap"><div class="page-heading"><span class="eyebrow">COURSE WORKSPACE / PREVIEW</span><h1>把好課，整理得更清楚。</h1><p>管理者身分已驗證。課程管理目前仍為本機體驗，修改只影響此瀏覽器的示範資料。</p></div><p class="note warn">此專區已由後端驗證管理者身分；課程資料庫及操作稽核將於後續階段串接。</p><section class="panel" style="margin:25px 0 40px"><div class="admin-controls"><h2>課程管理</h2><button class="button button-small button-outline" data-action="restore-courses">還原示範課程</button></div><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>課程</th><th>程度</th><th>錄播方案</th><th>陪跑方案</th><th>狀態</th><th>操作</th></tr></thead><tbody>${state.courses.map(c => `<tr><td><strong>${escape(c.title)}</strong><br><small class="muted">${c.id}</small></td><td>${stages[c.stage].short}</td><td>${money(c.price)}</td><td>${money(c.coachingPrice)}</td><td><span class="pill">${c.published ? '上架' : '草稿'}</span></td><td><button class="text-link" data-action="edit-course" data-id="${c.id}">編輯</button></td></tr>`).join('')}</tbody></table></div></section></div>`;
   const memberLink=document.createElement('a');memberLink.href='#members';memberLink.className='button button-outline';memberLink.textContent='檢閱會員資料 →';main.querySelector('.page-heading').append(memberLink);
   mountMemberDirectory();
 }
+function admin() { mountCloudAdmin(main, request, loadCatalog); }
 function members() {
   main.innerHTML='<div class="wrap"><div class="page-heading"><a class="text-link" href="#admin">← 管理中心</a><h1>會員資料</h1><p>搜尋與檢閱學員、講師及管理者帳號。</p></div></div>';
   mountMemberDirectory();
@@ -175,6 +215,7 @@ function mountMemberDirectory() {
       const data=await request('/api/admin/members?'+params);
       if(!panel.isConnected||version!==generation)return;
       results.innerHTML=data.members.length?`<div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>姓名</th><th>Email</th><th>身分</th><th>狀態</th><th>註冊時間（台北）</th></tr></thead><tbody>${data.members.map(user=>`<tr><td>${escape(user.name)}</td><td>${escape(user.email)}</td><td>${roleLabel(user.role)}</td><td>${user.active?'啟用':'停用'}</td><td>${escape(new Date(user.createdAt).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false}))}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">沒有符合條件的會員。</div>';
+      if(data.members.length){const rows=results.querySelectorAll('tbody tr');data.members.forEach((user,i)=>{const cell=rows[i].children[2],form=document.createElement('form'),select=document.createElement('select'),button=document.createElement('button');select.setAttribute('aria-label',`${user.name}的身分`);for(const [value,label] of [['student','學員'],['instructor','講師'],['admin','管理者']]){const option=document.createElement('option');option.value=value;option.textContent=label;option.selected=value===user.role;select.append(option)}button.textContent='儲存身分';button.className='button button-small button-outline';form.append(select,button);cell.replaceChildren(form);form.addEventListener('submit',async e=>{e.preventDefault();button.disabled=true;try{await request('/api/admin/role',{method:'POST',data:{userId:user.id,role:select.value}});toast('會員身分已更新，該帳號需重新登入。');await load()}catch(error){toast(error.message);button.disabled=false}})});}
       const pager=document.createElement('div');pager.className='member-pagination';
       const summary=document.createElement('span');summary.textContent=`共 ${data.total} 位會員 · 第 ${data.page} 頁`;pager.append(summary);
       for(const [label,delta,disabled]of [['上一頁',-1,page<=1],['下一頁',1,page*data.pageSize>=data.total]]){const b=document.createElement('button');b.className='button button-small button-outline';b.type='button';b.textContent=label;b.disabled=disabled;b.addEventListener('click',()=>{page+=delta;load();});pager.append(b);}
@@ -195,12 +236,14 @@ let routeVersion = 0;
 function activateAccountDrafts() {
   const key = account ? `${STORE}:${account.id}` : STORE;
   if (key !== storageKey) { readDrafts(key); mapStage = state.assessment?.stage ?? 0; }
+  if (!account) favoriteIds.clear();
   updateAccountNav();
 }
 function loginPage(destination = returnAfterLogin, mode = 'login') {
   returnAfterLogin = destination;
   mountAuth(main, { mode, onSuccess: async user => {
     activateAccountDrafts();
+    try { await loadLearning(); } catch { toast('學習紀錄暫時無法載入，請稍後重試。'); }
     const destinationAllowed = (!['admin','members'].includes(returnAfterLogin) || user.role === 'admin') && (returnAfterLogin !== 'instructor' || ['instructor','admin'].includes(user.role));
     const target = destinationAllowed && ['member','admin','instructor','members'].includes(returnAfterLogin) ? returnAfterLogin : homeFor(user);
     if (location.hash === `#${target}`) await route(); else location.hash = target;
@@ -216,6 +259,7 @@ function instructor() {
 }
 async function route() {
   const version = ++routeVersion;
+  clearInterval(bannerTimer);
   const oldVideo = $('#learning-video'); if (oldVideo) oldVideo.pause();
   stopCarousel(); if (modal.open) closeDialog();
   const [page = 'home', id] = location.hash.slice(1).split('/');
@@ -236,6 +280,7 @@ async function route() {
   $$('[data-nav]').forEach(a => { const active = a.dataset.nav === page || (page === 'course' && a.dataset.nav === 'courses'); a.classList.toggle('active', active); if (active) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
   const handlers = { home, courses: catalog, map, member, coaching, admin, members, instructor, video, login: () => account ? member() : loginPage(), register: () => account ? member() : loginPage(returnAfterLogin, 'register'), course: () => detail(id) };
   (handlers[page] ?? home)();
+  if(page==='member') mountMyCourses();
   document.title = `${({ home: '學得精 • 學得快 • 學得好', courses: '探索課程', map: 'AI 學習地圖', member: '我的學習', coaching: '1 對 1 個教', admin: '管理中心', members: '會員資料', instructor: '講師專區', login: '會員登入', register: '加入會員', video: '影片學習體驗', course: '課程介紹' })[page] ?? '首頁'}｜精五門 PentaSkill`;
   window.scrollTo({ top: 0, behavior: 'instant' });
 }
@@ -250,6 +295,7 @@ document.addEventListener('click', async e => {
     return;
   }
   if (a === 'quiz') startQuiz();
+  if (a === 'favorite') { if(!account){toast('請先登入後追蹤課程。');return;}button.disabled=true;try{const data=await request('/api/favorites',{method:'POST',data:{courseId:id,selected:!favoriteIds.has(id)}});favoriteIds=new Set(data.favorites);if($('#featured-grid'))renderFeatured();else if($('#catalog-grid'))renderCatalog();}catch(error){toast(error.message);button.disabled=false;}return; }
   if (a === 'close-modal') closeDialog();
   if (a === 'filter') { filter = button.dataset.filter; carouselIndex = 0; $$('[data-action="filter"]').forEach(b => { b.classList.toggle('active', b.dataset.filter === filter); b.setAttribute('aria-pressed', String(b.dataset.filter === filter)); }); if ($('#featured-grid')) renderFeatured(); else renderCatalog(); }
   if (a === 'prev-slide' || a === 'next-slide') { stopCarousel(); carouselIndex += a === 'next-slide' ? 1 : -1; renderFeatured(); }
@@ -262,11 +308,19 @@ document.addEventListener('click', async e => {
   if (a === 'quest') quest(Number(button.dataset.stage));
   if (a === 'quest-answer') {
     const i = Number(button.dataset.stage), correct = Number(button.dataset.answer) === quests[i].correct;
-    const result = awardQuest(state.completed, i, correct); state.completed = result.completed; save();
+    const result = awardQuest(state.completed, i, correct);
+    if (account) { try { const remote = await request('/api/learning/quest', { method:'POST', data:{stage:i,answer:Number(button.dataset.answer)} }); result.completed = remote.completed; } catch (error) { toast(`任務未同步：${error.message}`); return; } }
+    state.completed = result.completed; save();
     const feedback = $('#quest-feedback'); feedback.className = correct ? 'success-box' : 'note warn'; feedback.textContent = correct ? `${quests[i].explanation} ${result.earned ? `獲得 ${result.earned} XP！` : '這關已領過經驗值，複習也很棒。'}` : '再想想，選擇可以驗證、可追蹤，也能保護資料的做法。';
     if (correct) { $$('[data-action="quest-answer"]', content).forEach(b => b.disabled = true); const go = document.createElement('button'); go.className = 'button'; go.style.marginTop = '18px'; go.textContent = '回到學習地圖 ↗'; go.dataset.action = 'quiz-go-map'; feedback.after(go); }
   }
   if (a === 'order') previewOrder(id);
+  if (a === 'stage-checkout') {
+    if (!account) { toast('請先登入，再進行綠界測試付款。'); location.hash='login'; return; }
+    button.disabled=true;
+    try { const result=await request('/api/payments/ecpay/checkout',{method:'POST',data:{courseId:id}});if(result.action!=='https://payment-stage.ecpay.com.tw/Cashier/AioCheckOut/V5')throw new Error('付款測試網址不正確');const form=document.createElement('form');form.method='POST';form.action=result.action;for(const [name,value] of Object.entries(result.fields)){const input=document.createElement('input');input.type='hidden';input.name=name;input.value=String(value);form.append(input)}document.body.append(form);form.submit(); }
+    catch(error){toast(error.message);button.disabled=false;}
+  }
   if (a === 'save-order') { const c = courseById(id); if (!c?.published) return; const existing = state.orders.find(o => o.courseId === id && o.kind === button.dataset.plan && o.amount === pricePlan(c, button.dataset.plan).amount); if (!existing) state.orders.push(createPreviewOrder(c, button.dataset.plan, crypto.randomUUID())); save(); closeDialog(); toast(existing ? '這個方案已經保存在草稿中。' : '方案草稿已保存，可在「我的學習」查看。'); }
   if (a === 'quote') quote(id);
   if (a === 'video') location.hash = 'video';
@@ -277,7 +331,7 @@ document.addEventListener('click', async e => {
   if (a === 'confirm-reset') { state = { completed: [], assessment: null, orders: [], bookings: [], progress: 0, courses: structuredClone(initialCourses) }; save(); mapStage = 0; closeDialog(); member(); toast('這台裝置的體驗紀錄已清除。'); }
 });
 route();
-refreshSession().then(() => { authReady = true; activateAccountDrafts(); route(); });
+Promise.allSettled([loadCatalog(), refreshSession()]).then(async results => { authReady = true; activateAccountDrafts(); if (account) { try { await loadLearning(); } catch { toast('學習紀錄暫時無法載入，請稍後重試。'); } } if (results[0].status === 'rejected') toast('課程資料暫時無法載入，正在顯示示範資料。'); route(); });
 window.addEventListener('focus', async () => { const previous = account?.id; await refreshSession(); authReady = true; activateAccountDrafts(); if (previous !== account?.id) route(); });
 
 window.addEventListener('resize', () => { if (document.querySelector('#featured-grid')) renderFeatured(); });

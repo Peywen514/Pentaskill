@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS course_categories (id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, position INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS courses (id TEXT PRIMARY KEY, category_id TEXT NOT NULL REFERENCES course_categories(id), data TEXT NOT NULL, published INTEGER NOT NULL DEFAULT 0, featured INTEGER NOT NULL DEFAULT 0, position INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS learning_assessments (user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, answers TEXT NOT NULL, updated_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS learning_quests (user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, stage_id TEXT NOT NULL, completed_at INTEGER NOT NULL, PRIMARY KEY(user_id,stage_id));
+CREATE TABLE IF NOT EXISTS course_entitlements (user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, course_id TEXT NOT NULL REFERENCES courses(id), granted_by TEXT NOT NULL REFERENCES users(id), granted_at INTEGER NOT NULL, reason TEXT NOT NULL, revoked_at INTEGER, PRIMARY KEY(user_id,course_id));
+CREATE TABLE IF NOT EXISTS course_progress (user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, course_id TEXT NOT NULL REFERENCES courses(id), progress INTEGER NOT NULL DEFAULT 0 CHECK(progress BETWEEN 0 AND 100), updated_at INTEGER NOT NULL, PRIMARY KEY(user_id,course_id));
+CREATE TABLE IF NOT EXISTS admin_audit (id TEXT PRIMARY KEY, actor_id TEXT NOT NULL REFERENCES users(id), action TEXT NOT NULL, target TEXT NOT NULL, detail TEXT NOT NULL, created_at INTEGER NOT NULL);
